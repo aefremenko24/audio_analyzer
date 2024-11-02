@@ -90,7 +90,7 @@ static int streamCallBack2(
   fftw_execute(callbackData->p);
 
   for (int i = 0; i < dispSize; i++) {
-    double proportion = i / (double)dispSize;
+    double proportion = pow(i / (double)dispSize, 4);
     double freq = callbackData->out[(int)(callbackData->startIndex + proportion
         * callbackData->spectroSize)];
 
