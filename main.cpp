@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <iostream>
+#include <cstring>
+#include <math.h>
 
 #include <portaudio.h>
 #include <fftw3.h>

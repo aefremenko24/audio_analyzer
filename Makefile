@@ -15,7 +15,7 @@ uninstall-deps: uninstall-portaudio uninstall-fftw
 install-portaudio:
 	mkdir -p libs
 	curl https://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz | tar -zx -C libs
-	cd libs/portaudio && ./configure && $(MAKE) -j
+	cd libs/portaudio && ./configure && $(MAKE) -j && sudo $(MAKE) install
 .PHONY: install-portaudio
 
 uninstall-portaudio:
