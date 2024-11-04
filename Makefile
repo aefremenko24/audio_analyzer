@@ -15,7 +15,8 @@ uninstall-deps: uninstall-portaudio uninstall-fftw
 install-portaudio:
 	mkdir -p libs
 	curl https://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz | tar -zx -C libs
-	cd libs/portaudio && ./configure && $(MAKE) -j && sudo $(MAKE) install
+	CFLAGS="-Wno-unused-variable"
+	cd libs/portaudio && ./configure --disable-mac-universal && $(MAKE) -j
 .PHONY: install-portaudio
 
 uninstall-portaudio:
