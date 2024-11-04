@@ -8,7 +8,7 @@
 
 using namespace std;
 
-#define NUM_CHANNELS 2
+#define DISP_SIZE 30
 #define SAMPLE_RATE 44100.0
 #define FRAMES_PER_BUFFER 512
 
@@ -42,8 +42,7 @@ static int streamCallBack(
   (void)outputBuffer;
   streamCallbackData* callbackData = (streamCallbackData*)userData;
 
-  int dispSize = 100;
-  cout << "\r";
+  cout << "\r" << flush;
 
   float volL = 0;
   float volR = 0;
@@ -53,22 +52,18 @@ static int streamCallBack(
     volR = max(volR, abs(in[i+1]));
   }
 
-  for (int i = 0; i < dispSize; i++) {
-    float barProportion = i/(float)dispSize;
+  for (int i = 0; i < DISP_SIZE; i++) {
+    float barProportion = i/(float)DISP_SIZE;
     if (barProportion <= volL && barProportion <= volR) {
-      cout << "█";
+      cout << "█" << flush;
     } else if (barProportion <= volL) {
-      cout << "▀";
+      cout << "▀" << flush;
     } else if (barProportion <= volR) {
       cout << "▄";
     } else {
-      cout << " ";
+      cout << " " << flush;
     }
   }
-
-
-
-  fflush(stdout);
 
   return 0;
 }
@@ -82,40 +77,37 @@ static int streamCallBack2(
   (void)outputBuffer;
   streamCallbackData* callbackData = (streamCallbackData*)userData;
 
-  int dispSize = 100;
-  cout << "\r";
+  cout << "\r" << flush;
 
   for (unsigned long i = 0; i < framesPerBuffer; i++) {
-    callbackData->in[i] = in[i * NUM_CHANNELS];
+    callbackData->in[i] = in[i * 2];
   }
 
   fftw_execute(callbackData->p);
 
-  for (int i = 0; i < dispSize; i++) {
-    double proportion = pow(i / (double)dispSize, 4);
+  for (int i = 0; i < DISP_SIZE; i++) {
+    double proportion = pow(i / (double)DISP_SIZE, 1);
     double freq = callbackData->out[(int)(callbackData->startIndex + proportion
         * callbackData->spectroSize)];
 
     if (freq < 0.125) {
-      cout << "▁";
+      cout << "▁" << flush;
     } else if (freq < 0.25) {
-      cout << "▂";
+      cout << "▂" << flush;
     } else if (freq < 0.375) {
-      cout << "▃";
+      cout << "▃" << flush;
     } else if (freq < 0.5) {
-      cout << "▄";
+      cout << "▄" << flush;
     } else if (freq < 0.625) {
-      cout << "▅";
+      cout << "▅" << flush;
     } else if (freq < 0.75) {
-      cout << "▆";
+      cout << "▆" << flush;
     } else if (freq < 0.875) {
-      cout << "▇";
+      cout << "▇" << flush;
     } else {
-      cout << "█";
+      cout << "█" << flush;
     }
   }
-
-  fflush(stdout);
 
   return 0;
 }
@@ -175,11 +167,19 @@ int main() {
   PaStreamParameters outputParameters;
 
   memset(&inputParameters, 0, sizeof(inputParameters));
-  inputParameters.channelCount = NUM_CHANNELS;
+  inputParameters.channelCount = Pa_GetDeviceInfo(deviceSelection)->maxInputChannels;
   inputParameters.device = deviceSelection;
   inputParameters.hostApiSpecificStreamInfo = nullptr;
   inputParameters.sampleFormat = paFloat32;
   inputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
+
+  memset(&outputParameters, 0, sizeof(outputParameters));
+  outputParameters.channelCount = Pa_GetDeviceInfo(deviceSelection)->maxOutputChannels;
+  outputParameters.device = deviceSelection;
+  outputParameters.hostApiSpecificStreamInfo = nullptr;
+  outputParameters.sampleFormat = paFloat32;
+  outputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
+
 
   PaStream* stream;
   err = Pa_OpenStream(
@@ -189,7 +189,7 @@ int main() {
       SAMPLE_RATE,
       FRAMES_PER_BUFFER,
       paNoFlag,
-      streamCallBack,
+      streamCallBack2,
       spectroData
   );
   checkErr(err);
@@ -197,7 +197,7 @@ int main() {
   err = Pa_StartStream(stream);
   checkErr(err);
 
-  Pa_Sleep(10 * 1000);
+  Pa_Sleep(30 * 1000);
 
   err = Pa_CloseStream(stream);
   checkErr(err);
