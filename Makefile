@@ -1,10 +1,10 @@
 EXEC = audio_analyzer
 
-CLIB = -I./libs/portaudio/include /libs/portaudio/lib/.libs/libportaudio.a \
- -lrt -lasound -ljack -pthread -I./lib/fftw-3.3.10/api -lfftw3
+CLIB = -I./libs/portaudio/include ./libs/portaudio/lib/.libs/libportaudio.a \
+-lrt -lasound -ljack -pthread -I./lib/fftw-3.3.10/api -lfftw3
 
 $(EXEC): main.cpp
-	g++ -o $@ $^
+	g++ -o $@ $^ $(CLIB)
 
 install-deps: install-portaudio install-fftw
 .PHONY: install-deps
