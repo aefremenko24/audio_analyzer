@@ -5,6 +5,7 @@
 
 #include <portaudio.h>
 #include <fftw3.h>
+#include <curses.h>
 
 using namespace std;
 
@@ -33,16 +34,10 @@ static void checkErr(PaError err) {
   }
 }
 
-static int streamCallBack(
-    const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
-    const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags,
-    void* userData
+static int streamCallBackVolume(
+    const void* inputBuffer, unsigned long framesPerBuffer, WINDOW* win
     ) {
   float* in = (float*)inputBuffer;
-  (void)outputBuffer;
-  streamCallbackData* callbackData = (streamCallbackData*)userData;
-
-  cout << "\r" << flush;
 
   float volL = 0;
   float volR = 0;
@@ -55,23 +50,24 @@ static int streamCallBack(
   for (int i = 0; i < DISP_SIZE; i++) {
     float barProportion = i/(float)DISP_SIZE;
     if (barProportion <= volL && barProportion <= volR) {
-      cout << "█" << flush;
+      mvaddstr(0, 0, "█");
     } else if (barProportion <= volL) {
-      cout << "▀" << flush;
+      mvaddstr(0, 0, "▀");
     } else if (barProportion <= volR) {
-      cout << "▄";
+      mvaddstr(0, 0, "▄");
     } else {
-      cout << " " << flush;
+      mvaddstr(0, 0, " ");
     }
   }
+
+  refresh();
 
   return 0;
 }
 
-static int streamCallBack2(
+static int streamCallBackFrequencies(
     const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
-    const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags,
-    void* userData
+    void* userData, WINDOW* win
 ) {
   float* in = (float*)inputBuffer;
   (void)outputBuffer;
@@ -86,28 +82,56 @@ static int streamCallBack2(
   fftw_execute(callbackData->p);
 
   for (int i = 0; i < DISP_SIZE; i++) {
-    double proportion = pow(i / (double)DISP_SIZE, 1);
+    double proportion = i / ((double)DISP_SIZE*3);
     double freq = callbackData->out[(int)(callbackData->startIndex + proportion
         * callbackData->spectroSize)];
 
     if (freq < 0.125) {
-      cout << "▁" << flush;
+      mvaddstr(1, 0, "▁");
     } else if (freq < 0.25) {
-      cout << "▂" << flush;
+      mvaddstr(1, 0, "▂");
     } else if (freq < 0.375) {
-      cout << "▃" << flush;
+      mvaddstr(1, 0, "▃");
     } else if (freq < 0.5) {
-      cout << "▄" << flush;
+      mvaddstr(1, 0, "▄");
     } else if (freq < 0.625) {
-      cout << "▅" << flush;
+      mvaddstr(1, 0, "▅");
     } else if (freq < 0.75) {
-      cout << "▆" << flush;
+      mvaddstr(1, 0, "▆");
     } else if (freq < 0.875) {
-      cout << "▇" << flush;
+      mvaddstr(1, 0, "▇");
     } else {
-      cout << "█" << flush;
+      mvaddstr(1, 0, "█");
     }
   }
+
+  refresh();
+
+  return 0;
+}
+
+static int streamCallBack(
+    const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
+    const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags,
+    void* userData
+) {
+
+  initscr();
+  int y0 = 0;
+  int x0 = 0;
+  int nlines, ncols;
+  getmaxyx(stdscr, nlines, ncols);
+  WINDOW* win = newwin(nlines, ncols, y0, x0);
+
+  cout << "Volume:" << flush;
+  streamCallBackVolume(inputBuffer, framesPerBuffer, win);
+
+  cout << "\n";
+
+  cout << "Frequencies:" << flush;
+  streamCallBackFrequencies(inputBuffer, outputBuffer, framesPerBuffer, userData, win);
+
+  refresh();
 
   return 0;
 }
@@ -189,7 +213,7 @@ int main() {
       SAMPLE_RATE,
       FRAMES_PER_BUFFER,
       paNoFlag,
-      streamCallBack2,
+      streamCallBack,
       spectroData
   );
   checkErr(err);
