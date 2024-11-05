@@ -9,7 +9,7 @@
 
 using namespace std;
 
-#define DISP_SIZE 30
+#define DISP_SIZE 60
 #define SAMPLE_RATE 44100.0
 #define FRAMES_PER_BUFFER 512
 
@@ -35,7 +35,7 @@ static void checkErr(PaError err) {
 }
 
 static int streamCallBackVolume(
-    const void* inputBuffer, unsigned long framesPerBuffer, WINDOW* win
+    const void* inputBuffer, unsigned long framesPerBuffer
     ) {
   float* in = (float*)inputBuffer;
 
@@ -50,24 +50,22 @@ static int streamCallBackVolume(
   for (int i = 0; i < DISP_SIZE; i++) {
     float barProportion = i/(float)DISP_SIZE;
     if (barProportion <= volL && barProportion <= volR) {
-      mvaddstr(0, 0, "█");
+      waddch(stdscr, '=');
     } else if (barProportion <= volL) {
-      mvaddstr(0, 0, "▀");
+      waddch(stdscr, '-');
     } else if (barProportion <= volR) {
-      mvaddstr(0, 0, "▄");
+      waddch(stdscr, '_');
     } else {
-      mvaddstr(0, 0, " ");
+      waddch(stdscr, ' ');
     }
   }
-
-  refresh();
 
   return 0;
 }
 
 static int streamCallBackFrequencies(
     const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
-    void* userData, WINDOW* win
+    void* userData
 ) {
   float* in = (float*)inputBuffer;
   (void)outputBuffer;
@@ -87,25 +85,23 @@ static int streamCallBackFrequencies(
         * callbackData->spectroSize)];
 
     if (freq < 0.125) {
-      mvaddstr(1, 0, "▁");
+      waddch(stdscr, ',');
     } else if (freq < 0.25) {
-      mvaddstr(1, 0, "▂");
+      waddch(stdscr, '.');
     } else if (freq < 0.375) {
-      mvaddstr(1, 0, "▃");
+      waddch(stdscr, ';');
     } else if (freq < 0.5) {
-      mvaddstr(1, 0, "▄");
+      waddch(stdscr, ':');
     } else if (freq < 0.625) {
-      mvaddstr(1, 0, "▅");
+      waddch(stdscr, '\'');
     } else if (freq < 0.75) {
-      mvaddstr(1, 0, "▆");
+      waddch(stdscr, '\"');
     } else if (freq < 0.875) {
-      mvaddstr(1, 0, "▇");
+      waddch(stdscr, 'o');
     } else {
-      mvaddstr(1, 0, "█");
+      waddch(stdscr, '0');
     }
   }
-
-  refresh();
 
   return 0;
 }
@@ -115,23 +111,18 @@ static int streamCallBack(
     const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags,
     void* userData
 ) {
+  wrefresh(stdscr);
 
-  initscr();
-  int y0 = 0;
-  int x0 = 0;
-  int nlines, ncols;
-  getmaxyx(stdscr, nlines, ncols);
-  WINDOW* win = newwin(nlines, ncols, y0, x0);
+  waddstr(stdscr, "Volume:\n");
+  streamCallBackVolume(inputBuffer, framesPerBuffer);
 
-  cout << "Volume:" << flush;
-  streamCallBackVolume(inputBuffer, framesPerBuffer, win);
+  waddch(stdscr, '\n');
 
-  cout << "\n";
+  waddstr(stdscr, "Frequencies:\n");
+  streamCallBackFrequencies(inputBuffer, outputBuffer, framesPerBuffer, userData);
 
-  cout << "Frequencies:" << flush;
-  streamCallBackFrequencies(inputBuffer, outputBuffer, framesPerBuffer, userData, win);
-
-  refresh();
+  wrefresh(stdscr);
+  clear();
 
   return 0;
 }
@@ -204,6 +195,7 @@ int main() {
   outputParameters.sampleFormat = paFloat32;
   outputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
 
+  initscr();
 
   PaStream* stream;
   err = Pa_OpenStream(
@@ -233,6 +225,8 @@ int main() {
   fftw_free(spectroData->in);
   fftw_free(spectroData->out);
   fftw_free(spectroData);
+
+  delwin(stdscr);
 
   cout << endl;
 
