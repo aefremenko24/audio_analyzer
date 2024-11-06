@@ -9,12 +9,45 @@
 
 using namespace std;
 
-#define DISP_SIZE 60
 #define SAMPLE_RATE 44100.0
 #define FRAMES_PER_BUFFER 512
 
 #define SPECTRO_FREQ_START 20
 #define SPECTRO_FREQ_END 20000
+
+#define WIN_WIDTH 60
+#define VOL_WIN_HEIGHT 2
+#define FREQ_WIN_HEIGHT 3
+#define MARGIN 2
+
+WINDOW* VOL_WIN;
+WINDOW* FREQ_WIN;
+
+void init_vol_win() {
+  VOL_WIN = newwin(VOL_WIN_HEIGHT, WIN_WIDTH, 0, 0);
+  waddstr(VOL_WIN, "Volume:\n");
+}
+
+void init_freq_win() {
+  FREQ_WIN = newwin(FREQ_WIN_HEIGHT, WIN_WIDTH, VOL_WIN_HEIGHT + MARGIN, 0);
+  waddstr(FREQ_WIN, "Frequencies:\n");
+}
+
+void init_screen() {
+  initscr();
+  init_vol_win();
+  init_freq_win();
+}
+
+void refresh_screen() {
+  wrefresh(VOL_WIN);
+  wrefresh(FREQ_WIN);
+}
+
+void del_screen() {
+  delwin(VOL_WIN);
+  delwin(FREQ_WIN);
+}
 
 typedef struct {
   double* in;
@@ -25,7 +58,6 @@ typedef struct {
 } streamCallbackData;
 
 static streamCallbackData* spectroData;
-
 
 static void checkErr(PaError err) {
   if (err != paNoError) {
@@ -47,18 +79,24 @@ static int streamCallBackVolume(
     volR = max(volR, abs(in[i+1]));
   }
 
-  for (int i = 0; i < DISP_SIZE; i++) {
-    float barProportion = i/(float)DISP_SIZE;
+  int initial_x;
+  int initial_y;
+  getyx(VOL_WIN, initial_y, initial_x);
+
+  for (int i = 0; i < WIN_WIDTH; i++) {
+    float barProportion = i/(float)WIN_WIDTH;
     if (barProportion <= volL && barProportion <= volR) {
-      waddch(stdscr, '=');
+      waddch(VOL_WIN, '=');
     } else if (barProportion <= volL) {
-      waddch(stdscr, '-');
+      waddch(VOL_WIN, '-');
     } else if (barProportion <= volR) {
-      waddch(stdscr, '_');
+      waddch(VOL_WIN, '_');
     } else {
-      waddch(stdscr, ' ');
+      waddch(VOL_WIN, ' ');
     }
   }
+
+  wmove(VOL_WIN, initial_y, initial_x);
 
   return 0;
 }
@@ -71,37 +109,41 @@ static int streamCallBackFrequencies(
   (void)outputBuffer;
   streamCallbackData* callbackData = (streamCallbackData*)userData;
 
-  cout << "\r" << flush;
-
   for (unsigned long i = 0; i < framesPerBuffer; i++) {
     callbackData->in[i] = in[i * 2];
   }
 
+  int initial_x;
+  int initial_y;
+  getyx(FREQ_WIN, initial_y, initial_x);
+
   fftw_execute(callbackData->p);
 
-  for (int i = 0; i < DISP_SIZE; i++) {
-    double proportion = i / ((double)DISP_SIZE*3);
+  for (int i = 0; i < WIN_WIDTH; i++) {
+    double proportion = i / ((double)WIN_WIDTH);
     double freq = callbackData->out[(int)(callbackData->startIndex + proportion
         * callbackData->spectroSize)];
 
     if (freq < 0.125) {
-      waddch(stdscr, ',');
+      waddch(FREQ_WIN, ',');
     } else if (freq < 0.25) {
-      waddch(stdscr, '.');
+      waddch(FREQ_WIN, '.');
     } else if (freq < 0.375) {
-      waddch(stdscr, ';');
+      waddch(FREQ_WIN, ';');
     } else if (freq < 0.5) {
-      waddch(stdscr, ':');
+      waddch(FREQ_WIN, ':');
     } else if (freq < 0.625) {
-      waddch(stdscr, '\'');
+      waddch(FREQ_WIN, '\'');
     } else if (freq < 0.75) {
-      waddch(stdscr, '\"');
+      waddch(FREQ_WIN, '\"');
     } else if (freq < 0.875) {
-      waddch(stdscr, 'o');
+      waddch(FREQ_WIN, 'o');
     } else {
-      waddch(stdscr, '0');
+      waddch(FREQ_WIN, '0');
     }
   }
+
+  wmove(FREQ_WIN, initial_y, initial_x);
 
   return 0;
 }
@@ -111,18 +153,12 @@ static int streamCallBack(
     const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags,
     void* userData
 ) {
-  wrefresh(stdscr);
 
-  waddstr(stdscr, "Volume:\n");
   streamCallBackVolume(inputBuffer, framesPerBuffer);
 
-  waddch(stdscr, '\n');
-
-  waddstr(stdscr, "Frequencies:\n");
   streamCallBackFrequencies(inputBuffer, outputBuffer, framesPerBuffer, userData);
 
-  wrefresh(stdscr);
-  clear();
+  refresh_screen();
 
   return 0;
 }
@@ -195,7 +231,7 @@ int main() {
   outputParameters.sampleFormat = paFloat32;
   outputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
 
-  initscr();
+  init_screen();
 
   PaStream* stream;
   err = Pa_OpenStream(
@@ -226,7 +262,7 @@ int main() {
   fftw_free(spectroData->out);
   fftw_free(spectroData);
 
-  delwin(stdscr);
+  del_screen();
 
   cout << endl;
 
