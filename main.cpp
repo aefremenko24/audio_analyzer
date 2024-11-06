@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <cstring>
-#include <math.h>
+#include <cmath>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -10,7 +10,7 @@
 using namespace std;
 
 #define SAMPLE_RATE 44100.0
-#define FRAMES_PER_BUFFER 512
+#define FRAMES_PER_BUFFER 1024
 
 #define SPECTRO_FREQ_START 20
 #define SPECTRO_FREQ_END 20000
@@ -22,12 +22,13 @@ using namespace std;
 #define VOL_INIT_X 0
 #define VOL_INIT_Y 0
 
-#define FREQ_WIN_HEIGHT 10
+#define FREQ_WIN_HEIGHT 20
 #define FREQ_INIT_X 0
 #define FREQ_INIT_Y (VOL_INIT_Y + VOL_WIN_HEIGHT + MARGIN)
 
 WINDOW* VOL_WIN;
 WINDOW* FREQ_WIN;
+std::unordered_map<int, double> current_max;
 
 void init_vol_win() {
   VOL_WIN = newwin(VOL_WIN_HEIGHT, WIN_WIDTH, 0, 0);
@@ -39,7 +40,14 @@ void init_freq_win() {
   waddstr(FREQ_WIN, "Frequencies:\n");
 }
 
+void init_current_max() {
+  for (int freq = 0; freq < WIN_WIDTH; freq++) {
+    current_max[freq] = 0.0;
+  }
+}
+
 void init_screen() {
+  init_current_max();
   initscr();
   init_vol_win();
   init_freq_win();
@@ -72,7 +80,7 @@ static void checkErr(PaError err) {
   }
 }
 
-static int streamCallBackVolume(
+void streamCallBackVolume(
     const void* inputBuffer, unsigned long framesPerBuffer
     ) {
   float* in = (float*)inputBuffer;
@@ -103,11 +111,25 @@ static int streamCallBackVolume(
   }
 
   wmove(VOL_WIN, initial_y, initial_x);
-
-  return 0;
 }
 
-static int streamCallBackFrequencies(
+void display_current_max() {
+  int initial_x;
+  int initial_y;
+  getyx(FREQ_WIN, initial_y, initial_x);
+
+  for (const std::pair<int, double>& n : current_max) {
+    int y_pos = 1 + FREQ_WIN_HEIGHT - (int)((double)FREQ_WIN_HEIGHT * n.second);
+    int x_pos = n.first;
+
+    wmove(FREQ_WIN, y_pos, x_pos);
+    waddch(FREQ_WIN, '_');
+  }
+
+  wmove(FREQ_WIN, initial_y, initial_x);
+}
+
+void streamCallBackFrequencies(
     const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
     void* userData
 ) {
@@ -126,15 +148,19 @@ static int streamCallBackFrequencies(
   fftw_execute(callbackData->p);
 
   for (int i = 0; i < WIN_WIDTH; i++) {
-    double proportion = i / ((double)WIN_WIDTH);
-    double freq = callbackData->out[(int)(callbackData->startIndex + proportion
+    double freq = pow(i / ((double)WIN_WIDTH), 2);
+    double proportion = callbackData->out[(int)(callbackData->startIndex + freq
         * callbackData->spectroSize)];
+
+    if (abs(proportion) > current_max[i]) {
+      current_max[i] = min(abs(proportion), 1.0);
+    }
 
     for (int j = 1; j < FREQ_WIN_HEIGHT; j++) {
       double desired_level = (double)((FREQ_WIN_HEIGHT) - j) / (double)FREQ_WIN_HEIGHT;
       wmove(FREQ_WIN, j, i + 1);
 
-      if (freq >= desired_level) {
+      if (proportion >= desired_level) {
         waddch(FREQ_WIN, '*');
       } else {
         waddch(FREQ_WIN, ' ');
@@ -142,9 +168,9 @@ static int streamCallBackFrequencies(
     }
   }
 
-  wmove(FREQ_WIN, initial_y, initial_x);
+  display_current_max();
 
-  return 0;
+  wmove(FREQ_WIN, initial_y, initial_x);
 }
 
 static int streamCallBack(
@@ -162,27 +188,7 @@ static int streamCallBack(
   return 0;
 }
 
-int main() {
-  PaError err;
-  err = Pa_Initialize();
-  checkErr(err);
-
-  spectroData = (streamCallbackData*)malloc(sizeof(streamCallbackData));
-  spectroData->in = (double*)malloc(sizeof(double) * FRAMES_PER_BUFFER);
-  spectroData->out = (double*)malloc(sizeof(double) * FRAMES_PER_BUFFER);
-  if (spectroData->in == nullptr || spectroData->out == nullptr) {
-    cout << "Could not allocate spectro data." << endl;
-    exit(EXIT_FAILURE);
-  }
-  spectroData->p = fftw_plan_r2r_1d(FRAMES_PER_BUFFER, spectroData->in, spectroData->out,
-                                    FFTW_R2HC, FFTW_ESTIMATE);
-
-  double sampleRatio = FRAMES_PER_BUFFER / SAMPLE_RATE;
-  spectroData->startIndex = std::ceil(sampleRatio * SPECTRO_FREQ_START);
-  spectroData->spectroSize = min(std::ceil(sampleRatio * SPECTRO_FREQ_END),
-                                 FRAMES_PER_BUFFER / 2.0)
-                                     - spectroData->startIndex;
-
+int prompt_device() {
   int numDevices = Pa_GetDeviceCount();
   if (numDevices < 0) {
     cout << "Encountered error while getting the number of devices." << endl;
@@ -213,6 +219,47 @@ int main() {
     cin >> deviceSelection;
   }
 
+  return deviceSelection;
+}
+
+streamCallbackData* init_spectro_data() {
+  spectroData = (streamCallbackData*)malloc(sizeof(streamCallbackData));
+  spectroData->in = (double*)malloc(sizeof(double) * FRAMES_PER_BUFFER);
+  spectroData->out = (double*)malloc(sizeof(double) * FRAMES_PER_BUFFER);
+  if (spectroData->in == nullptr || spectroData->out == nullptr) {
+    cout << "Could not allocate spectro data." << endl;
+    exit(EXIT_FAILURE);
+  }
+  spectroData->p = fftw_plan_r2r_1d(FRAMES_PER_BUFFER, spectroData->in, spectroData->out,
+                                    FFTW_R2HC, FFTW_ESTIMATE);
+
+  double sampleRatio = FRAMES_PER_BUFFER / SAMPLE_RATE;
+  spectroData->startIndex = std::ceil(sampleRatio * SPECTRO_FREQ_START);
+  spectroData->spectroSize = min(std::ceil(sampleRatio * SPECTRO_FREQ_END),
+                                 FRAMES_PER_BUFFER / 2.0)
+                             - spectroData->startIndex;
+
+  return spectroData;
+}
+
+void close_stream(PaStream* stream, PaError err) {
+  err = Pa_CloseStream(stream);
+  checkErr(err);
+
+  err = Pa_Terminate();
+  checkErr(err);
+
+  fftw_destroy_plan(spectroData->p);
+  fftw_free(spectroData->in);
+  fftw_free(spectroData->out);
+  fftw_free(spectroData);
+
+  del_screen();
+}
+
+void process_stream(int deviceSelection, streamCallbackData* spectroData, PaError err) {
+  init_screen();
+
   PaStreamParameters inputParameters;
   PaStreamParameters outputParameters;
 
@@ -230,8 +277,6 @@ int main() {
   outputParameters.sampleFormat = paFloat32;
   outputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
 
-  init_screen();
-
   PaStream* stream;
   err = Pa_OpenStream(
       &stream,
@@ -248,22 +293,25 @@ int main() {
   err = Pa_StartStream(stream);
   checkErr(err);
 
-  Pa_Sleep(30 * 1000);
+  char input;
+  while(input != ' ' && input != 'r') {
+    input = tolower(getch());
+    if (input == 'r') {
+      return process_stream(deviceSelection, spectroData, err);
+    }
+  }
 
-  err = Pa_CloseStream(stream);
+  close_stream(stream, err);
+}
+
+int main() {
+  PaError err;
+  err = Pa_Initialize();
   checkErr(err);
 
-  err = Pa_Terminate();
-  checkErr(err);
-
-  fftw_destroy_plan(spectroData->p);
-  fftw_free(spectroData->in);
-  fftw_free(spectroData->out);
-  fftw_free(spectroData);
-
-  del_screen();
-
-  cout << endl;
+  streamCallbackData* spectroData = init_spectro_data();
+  int deviceSelection = prompt_device();
+  process_stream(deviceSelection, spectroData, err);
 
   return EXIT_SUCCESS;
 }
