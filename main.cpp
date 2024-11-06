@@ -16,9 +16,15 @@ using namespace std;
 #define SPECTRO_FREQ_END 20000
 
 #define WIN_WIDTH 60
-#define VOL_WIN_HEIGHT 2
-#define FREQ_WIN_HEIGHT 3
 #define MARGIN 2
+
+#define VOL_WIN_HEIGHT 2
+#define VOL_INIT_X 0
+#define VOL_INIT_Y 0
+
+#define FREQ_WIN_HEIGHT 10
+#define FREQ_INIT_X 0
+#define FREQ_INIT_Y (VOL_INIT_Y + VOL_WIN_HEIGHT + MARGIN)
 
 WINDOW* VOL_WIN;
 WINDOW* FREQ_WIN;
@@ -124,22 +130,15 @@ static int streamCallBackFrequencies(
     double freq = callbackData->out[(int)(callbackData->startIndex + proportion
         * callbackData->spectroSize)];
 
-    if (freq < 0.125) {
-      waddch(FREQ_WIN, ',');
-    } else if (freq < 0.25) {
-      waddch(FREQ_WIN, '.');
-    } else if (freq < 0.375) {
-      waddch(FREQ_WIN, ';');
-    } else if (freq < 0.5) {
-      waddch(FREQ_WIN, ':');
-    } else if (freq < 0.625) {
-      waddch(FREQ_WIN, '\'');
-    } else if (freq < 0.75) {
-      waddch(FREQ_WIN, '\"');
-    } else if (freq < 0.875) {
-      waddch(FREQ_WIN, 'o');
-    } else {
-      waddch(FREQ_WIN, '0');
+    for (int j = 1; j < FREQ_WIN_HEIGHT; j++) {
+      double desired_level = (double)((FREQ_WIN_HEIGHT) - j) / (double)FREQ_WIN_HEIGHT;
+      wmove(FREQ_WIN, j, i + 1);
+
+      if (freq >= desired_level) {
+        waddch(FREQ_WIN, '*');
+      } else {
+        waddch(FREQ_WIN, ' ');
+      }
     }
   }
 
