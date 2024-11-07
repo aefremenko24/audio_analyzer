@@ -10,33 +10,33 @@
 using namespace std;
 
 #define SAMPLE_RATE 44100.0
-#define FRAMES_PER_BUFFER 1024
+#define FRAMES_PER_BUFFER 2048
 
 #define SPECTRO_FREQ_START 20
 #define SPECTRO_FREQ_END 20000
 
-#define WIN_WIDTH 60
+#define WIN_WIDTH 100
 #define MARGIN 2
 
-#define VOL_WIN_HEIGHT 2
 #define VOL_INIT_X 0
 #define VOL_INIT_Y 0
 
 #define FREQ_WIN_HEIGHT 20
 #define FREQ_INIT_X 0
-#define FREQ_INIT_Y (VOL_INIT_Y + VOL_WIN_HEIGHT + MARGIN)
 
 WINDOW* VOL_WIN;
 WINDOW* FREQ_WIN;
 std::unordered_map<int, double> current_max;
 
-void init_vol_win() {
-  VOL_WIN = newwin(VOL_WIN_HEIGHT, WIN_WIDTH, 0, 0);
+int num_channels;
+
+void init_vol_win(int num_channels = 1) {
+  VOL_WIN = newwin(num_channels + 1, WIN_WIDTH, 0, 0);
   waddstr(VOL_WIN, "Volume:\n");
 }
 
-void init_freq_win() {
-  FREQ_WIN = newwin(FREQ_WIN_HEIGHT, WIN_WIDTH, VOL_WIN_HEIGHT + MARGIN, 0);
+void init_freq_win(int num_channels = 1) {
+  FREQ_WIN = newwin(FREQ_WIN_HEIGHT, WIN_WIDTH, num_channels + 1 + MARGIN, 0);
   waddstr(FREQ_WIN, "Frequencies:\n");
 }
 
@@ -46,11 +46,20 @@ void init_current_max() {
   }
 }
 
-void init_screen() {
+void decrement_current_max() {
+  double decrement = 0.0003 * (double)FREQ_WIN_HEIGHT;
+  for (int freq = 0; freq < WIN_WIDTH; freq++) {
+    if (current_max[freq] * (double)FREQ_WIN_HEIGHT > decrement) {
+      current_max[freq] -= decrement;
+    }
+  }
+}
+
+void init_screen(int num_channels = 1) {
   init_current_max();
   initscr();
-  init_vol_win();
-  init_freq_win();
+  init_vol_win(num_channels);
+  init_freq_win(num_channels);
 }
 
 void refresh_screen() {
@@ -85,28 +94,32 @@ void streamCallBackVolume(
     ) {
   float* in = (float*)inputBuffer;
 
-  float volL = 0;
-  float volR = 0;
+  const int NUM_CHANNELS = num_channels;
+  float channelVolumes[NUM_CHANNELS];
 
-  for (unsigned long i = 0; i < framesPerBuffer * 2; i += 2) {
-    volL = max(volL, abs(in[i]));
-    volR = max(volR, abs(in[i+1]));
+  for (unsigned long channelNum = 0; channelNum < NUM_CHANNELS; channelNum++) {
+    channelVolumes[channelNum] = 0.0;
+  }
+
+  for (unsigned long i = 0; i < framesPerBuffer * NUM_CHANNELS; i += NUM_CHANNELS) {
+    for (unsigned long channelNum = 0; channelNum < NUM_CHANNELS; channelNum++) {
+      channelVolumes[channelNum] = max(channelVolumes[channelNum], abs(in[i + channelNum]));
+    }
   }
 
   int initial_x;
   int initial_y;
   getyx(VOL_WIN, initial_y, initial_x);
 
-  for (int i = 0; i < WIN_WIDTH; i++) {
-    float barProportion = i/(float)WIN_WIDTH;
-    if (barProportion <= volL && barProportion <= volR) {
-      waddch(VOL_WIN, '=');
-    } else if (barProportion <= volL) {
-      waddch(VOL_WIN, '-');
-    } else if (barProportion <= volR) {
-      waddch(VOL_WIN, '_');
-    } else {
-      waddch(VOL_WIN, ' ');
+  for (unsigned long channelNum = 0; channelNum < NUM_CHANNELS; channelNum++) {
+    wmove(VOL_WIN, VOL_INIT_Y + channelNum + 1, VOL_INIT_X);
+    for (int i = 0; i < WIN_WIDTH; i++) {
+      float barProportion = i/((float)WIN_WIDTH);
+      if (barProportion <= channelVolumes[channelNum]) {
+        waddch(VOL_WIN, '=');
+      } else {
+        waddch(VOL_WIN, ' ');
+      }
     }
   }
 
@@ -150,7 +163,7 @@ void streamCallBackFrequencies(
   for (int i = 0; i < WIN_WIDTH; i++) {
     double freq = pow(i / ((double)WIN_WIDTH), 2);
     double proportion = callbackData->out[(int)(callbackData->startIndex + freq
-        * callbackData->spectroSize)];
+        * callbackData->spectroSize)]/5;
 
     if (abs(proportion) > current_max[i]) {
       current_max[i] = min(abs(proportion), 1.0);
@@ -161,7 +174,7 @@ void streamCallBackFrequencies(
       wmove(FREQ_WIN, j, i + 1);
 
       if (proportion >= desired_level) {
-        waddch(FREQ_WIN, '*');
+        waddch(FREQ_WIN, 'o');
       } else {
         waddch(FREQ_WIN, ' ');
       }
@@ -169,6 +182,7 @@ void streamCallBackFrequencies(
   }
 
   display_current_max();
+  decrement_current_max();
 
   wmove(FREQ_WIN, initial_y, initial_x);
 }
@@ -263,7 +277,6 @@ void init_stream(PaError* err) {
 }
 
 void process_stream(int deviceSelection, streamCallbackData* spectroData, PaError err) {
-  init_screen();
 
   PaStreamParameters inputParameters;
   PaStreamParameters outputParameters;
@@ -281,6 +294,9 @@ void process_stream(int deviceSelection, streamCallbackData* spectroData, PaErro
   outputParameters.hostApiSpecificStreamInfo = nullptr;
   outputParameters.sampleFormat = paFloat32;
   outputParameters.suggestedLatency = Pa_GetDeviceInfo(deviceSelection)->defaultLowInputLatency;
+
+  num_channels = inputParameters.channelCount;
+  init_screen(num_channels);
 
   PaStream* stream;
   err = Pa_OpenStream(
