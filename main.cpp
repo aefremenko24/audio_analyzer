@@ -242,7 +242,7 @@ streamCallbackData* init_spectro_data() {
   return spectroData;
 }
 
-void close_stream(PaStream* stream, PaError err) {
+void close_stream(PaStream* stream, streamCallbackData* spectroData, PaError err) {
   err = Pa_CloseStream(stream);
   checkErr(err);
 
@@ -255,6 +255,11 @@ void close_stream(PaStream* stream, PaError err) {
   fftw_free(spectroData);
 
   del_screen();
+}
+
+void init_stream(PaError* err) {
+  *err = Pa_Initialize();
+  checkErr(*err);
 }
 
 void process_stream(int deviceSelection, streamCallbackData* spectroData, PaError err) {
@@ -297,18 +302,20 @@ void process_stream(int deviceSelection, streamCallbackData* spectroData, PaErro
   while(input != ' ' && input != 'r') {
     input = tolower(getch());
     if (input == 'r') {
+      close_stream(stream, spectroData, err);
+      init_stream(&err);
+      spectroData = init_spectro_data();
       return process_stream(deviceSelection, spectroData, err);
     }
   }
 
-  close_stream(stream, err);
+  close_stream(stream, spectroData, err);
 }
 
 int main() {
   PaError err;
-  err = Pa_Initialize();
-  checkErr(err);
 
+  init_stream(&err);
   streamCallbackData* spectroData = init_spectro_data();
   int deviceSelection = prompt_device();
   process_stream(deviceSelection, spectroData, err);
