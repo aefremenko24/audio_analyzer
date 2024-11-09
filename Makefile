@@ -6,7 +6,7 @@ CLIB = -I./libs/portaudio/include ./libs/portaudio/lib/.libs/libportaudio.a \
 PLATFORM := $(shell uname -s)
 
 ifeq ($(PLATFORM), Linux)
-	CXX = $(CXX)
+	CXX = g++
 	ARGS =
 
 else ifeq ($(PLATFORM),Darwin)
