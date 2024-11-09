@@ -3,9 +3,25 @@ EXEC = audio_analyzer
 CLIB = -I./libs/portaudio/include ./libs/portaudio/lib/.libs/libportaudio.a \
 -I./libs/fftw-3.3.10/api -lfftw3 -lncurses
 
+PLATFORM := $(shell uname -s)
+
+ifeq ($(PLATFORM), Linux)
+	CXX = $(CXX)
+	ARGS =
+
+else ifeq ($(PLATFORM),Darwin)
+	CXX = clang++
+	ARGS = -framework CoreAudio -framework AudioUnit -framework AudioToolbox \
+                    -framework Carbon
+
+else
+    $(error Unsupported platform: $(PLATFORM))
+endif
+
 $(EXEC): main.cpp
-	g++ -framework CoreAudio -framework AudioUnit -framework AudioToolbox \
--framework Carbon $(CLIB) main.cpp
+	$(CXX) $(ARGS) $(CLIB) -o $@ $^
+
+all: install-deps $(EXEC)
 
 install-deps: install-portaudio install-fftw
 .PHONY: install-deps
