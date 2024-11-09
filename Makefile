@@ -7,7 +7,7 @@ PLATFORM := $(shell uname -s)
 
 ifeq ($(PLATFORM), Linux)
 	CXX = $(CXX)
-	ARGS =
+	ARGS := $(shell sudo apt install libncurses-dev)
 
 else ifeq ($(PLATFORM),Darwin)
 	CXX = clang++
