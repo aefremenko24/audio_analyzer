@@ -1,7 +1,7 @@
 EXEC = audio_analyzer
 
 CLIB = -I./libs/portaudio/include ./libs/portaudio/lib/.libs/libportaudio.a \
--I./libs/fftw-3.3.10/api -lfftw3 -lncurses
+-I./libs/fftw-3.3.10/api -lfftw3 -lncurses -Wno-c++11-extensions
 
 PLATFORM := $(shell uname -s)
 

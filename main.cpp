@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <iostream>
 #include <cstring>
 #include <cmath>
@@ -37,16 +36,13 @@ NOTE: Coordinates used in this project assume (0, 0) is the top left corner of t
 /// The height of the frequency view window in number of lines
 #define FREQ_WIN_HEIGHT 20
 
-/// y-coordinate of the top left corner of the frequency view window
-#define FREQ_INIT_X 0
-
 /// Data structures representing the volume and frequency view windows
 WINDOW *VOL_WIN;
 WINDOW *FREQ_WIN;
 
 /// Map representing the recent maximum measurement of the amplitude at each frequency.
 /// Each value in the map will be decremented over time until new max is set.
-std::unordered_map<int, double> current_max;
+float current_max[WIN_WIDTH];
 
 /// Number of input channels for the input source the program is working with
 int num_channels;
@@ -54,20 +50,20 @@ int num_channels;
 /**
  * Initializes the volume display window using ncurses, given the number of channels in the input.
  *
- * @param num_channels number of channels in the input; directly affects the height of the window.
+ * @param num_chan number of channels in the input; directly affects the height of the window.
  */
-void init_vol_win(int num_channels = 1) {
-  VOL_WIN = newwin(num_channels + 1, WIN_WIDTH, 0, 0);
+void init_vol_win(int num_chan = 1) {
+  VOL_WIN = newwin(num_chan + 1, WIN_WIDTH, 0, 0);
   waddstr(VOL_WIN, "Volume:\n");
 }
 
 /**
  * Initializes the frequency display window using ncurses, given the number of channels in the input.
  *
- * @param num_channels number of channels in the input; affects the initial y position of the window.
+ * @param num_chan number of channels in the input; affects the initial y position of the window.
  */
-void init_freq_win(int num_channels = 1) {
-  FREQ_WIN = newwin(FREQ_WIN_HEIGHT, WIN_WIDTH, num_channels + 1 + MARGIN, 0);
+void init_freq_win(int num_chan = 1) {
+  FREQ_WIN = newwin(FREQ_WIN_HEIGHT, WIN_WIDTH, num_chan + 1 + MARGIN, 0);
   waddstr(FREQ_WIN, "Frequencies:\n");
 }
 
@@ -75,8 +71,8 @@ void init_freq_win(int num_channels = 1) {
  * Fills the current local-max map with 0s (initial state).
  */
 void init_current_max() {
-  for (int freq = 0; freq < WIN_WIDTH; freq++) {
-    current_max[freq] = 0.0;
+  for (float & freq : current_max) {
+    freq = 0.0;
   }
 }
 
@@ -85,10 +81,10 @@ void init_current_max() {
  * Called every time streamCallBack is returned.
  */
 void decrement_current_max() {
-  double decrement = 0.0003 * (double) FREQ_WIN_HEIGHT;
-  for (int freq = 0; freq < WIN_WIDTH; freq++) {
-    if (current_max[freq] * (double) FREQ_WIN_HEIGHT > decrement) {
-      current_max[freq] -= decrement;
+  float decrement = 0.0003 * (double) FREQ_WIN_HEIGHT;
+  for (float & freq : current_max) {
+    if (freq * (double) FREQ_WIN_HEIGHT > decrement) {
+      freq -= decrement;
     }
   }
 }
@@ -96,13 +92,13 @@ void decrement_current_max() {
 /**
  * Initializes the ncurses screen with windows for each section of the view.
  *
- * @param num_channels number of channels in the input; affects the total height of all windows on the screen.
+ * @param num_chan number of channels in the input; affects the total height of all windows on the screen.
  */
-void init_screen(int num_channels = 1) {
+void init_screen(int num_chan = 1) {
   init_current_max();
   initscr();
-  init_vol_win(num_channels);
-  init_freq_win(num_channels);
+  init_vol_win(num_chan);
+  init_freq_win(num_chan);
 }
 
 /**
@@ -161,7 +157,7 @@ static void checkErr(PaError err) {
 void streamCallBackVolume(
     const void *inputBuffer, unsigned long framesPerBuffer
 ) {
-  float *in = (float *) inputBuffer;
+  auto *in = (float *) inputBuffer;
 
   const int NUM_CHANNELS = num_channels;
   float channelVolumes[NUM_CHANNELS];
@@ -183,7 +179,7 @@ void streamCallBackVolume(
   for (unsigned long channelNum = 0; channelNum < NUM_CHANNELS; channelNum++) {
     wmove(VOL_WIN, VOL_INIT_Y + channelNum + 1, VOL_INIT_X);
     for (int i = 0; i < WIN_WIDTH; i++) {
-      float barProportion = i / ((float) WIN_WIDTH);
+      float barProportion = (float)i / ((float) WIN_WIDTH);
       if (barProportion <= channelVolumes[channelNum]) {
         waddch(VOL_WIN, '=');
       } else {
@@ -204,11 +200,10 @@ void display_current_max() {
   int initial_y;
   getyx(FREQ_WIN, initial_y, initial_x);
 
-  for (const std::pair<int, double> &n: current_max) {
-    int y_pos = 1 + FREQ_WIN_HEIGHT - (int) ((double) FREQ_WIN_HEIGHT * n.second);
-    int x_pos = n.first;
+  for (int max_index = 0; max_index < WIN_WIDTH; max_index++) {
+    int y_pos = 1 + FREQ_WIN_HEIGHT - (int) ((double) FREQ_WIN_HEIGHT * current_max[max_index]);
 
-    wmove(FREQ_WIN, y_pos, x_pos);
+    wmove(FREQ_WIN, y_pos, max_index);
     waddch(FREQ_WIN, '_');
   }
 
@@ -227,8 +222,8 @@ void streamCallBackFrequencies(
     const void *inputBuffer, unsigned long framesPerBuffer,
     void *userData
 ) {
-  float *in = (float *) inputBuffer;
-  streamCallbackData *callbackData = (streamCallbackData *) userData;
+  auto *in = (float *) inputBuffer;
+  auto *callbackData = (streamCallbackData *) userData;
 
   for (unsigned long i = 0; i < framesPerBuffer; i++) {
     callbackData->in[i] = in[i * 2];
@@ -248,7 +243,7 @@ void streamCallBackFrequencies(
                         5;
 
     if (abs(proportion) > current_max[i]) {
-      current_max[i] = min(abs(proportion), 1.0);
+      current_max[i] = (float)min(abs(proportion), 1.0);
     }
 
     for (int j = 1; j < FREQ_WIN_HEIGHT; j++) {
@@ -345,19 +340,22 @@ int prompt_device() {
  * @return Spectro data (see streamCallbackData struct definition above)
  */
 streamCallbackData *init_spectro_data() {
-  spectroData = (streamCallbackData *) malloc(sizeof(streamCallbackData));
-  spectroData->in = (double *) malloc(sizeof(double) * FRAMES_PER_BUFFER);
-  spectroData->out = (double *) malloc(sizeof(double) * FRAMES_PER_BUFFER);
-  if (spectroData->in == nullptr || spectroData->out == nullptr) {
+  try {
+    spectroData = new streamCallbackData;
+    spectroData->in = (double *) fftw_malloc(sizeof(double) * FRAMES_PER_BUFFER);
+    spectroData->out = (double *) fftw_malloc(sizeof(double) * FRAMES_PER_BUFFER);
+  }
+  catch (bad_alloc& ex) {
     cout << "Could not allocate spectro data." << endl;
     exit(EXIT_FAILURE);
   }
+
   spectroData->p = fftw_plan_r2r_1d(FRAMES_PER_BUFFER, spectroData->in, spectroData->out,
                                     FFTW_R2HC, FFTW_ESTIMATE);
 
   double sampleRatio = FRAMES_PER_BUFFER / SAMPLE_RATE;
   spectroData->startIndex = std::ceil(sampleRatio * SPECTRO_FREQ_START);
-  spectroData->spectroSize = min(std::ceil(sampleRatio * SPECTRO_FREQ_END),
+  spectroData->spectroSize = (int)min(std::ceil(sampleRatio * SPECTRO_FREQ_END),
                                  FRAMES_PER_BUFFER / 2.0)
                              - spectroData->startIndex;
 
@@ -368,20 +366,20 @@ streamCallbackData *init_spectro_data() {
  * Closes the stream and cleans up all the allocated memory used during the program runtime.
  *
  * @param stream Stream to be closed.
- * @param spectroData Spectro data used for FFT computations.
+ * @param currentSpectroData Spectro data used for FFT computations.
  * @param err PulseAudio error code.
  */
-void close_stream(PaStream *stream, streamCallbackData *spectroData, PaError err) {
+void close_stream(PaStream *stream, streamCallbackData *currentSpectroData, PaError err) {
   err = Pa_CloseStream(stream);
   checkErr(err);
 
   err = Pa_Terminate();
   checkErr(err);
 
-  fftw_destroy_plan(spectroData->p);
-  fftw_free(spectroData->in);
-  fftw_free(spectroData->out);
-  fftw_free(spectroData);
+  fftw_destroy_plan(currentSpectroData->p);
+  fftw_free(currentSpectroData->in);
+  fftw_free(currentSpectroData->out);
+  fftw_free(currentSpectroData);
 
   del_screen();
 }
@@ -400,10 +398,10 @@ void init_stream(PaError *err) {
  * Runs the stream processing for the selected device from start to finish.
  *
  * @param deviceSelection User's device selection.
- * @param spectroData Spectro data used for FFT processing.
+ * @param currentSpectroData Spectro data used for FFT processing.
  * @param err PulseAudio error code.
  */
-void process_stream(int deviceSelection, streamCallbackData *spectroData, PaError err) {
+void process_stream(int deviceSelection, streamCallbackData *currentSpectroData, PaError err) {
 
   PaStreamParameters inputParameters;
   PaStreamParameters outputParameters;
@@ -434,34 +432,34 @@ void process_stream(int deviceSelection, streamCallbackData *spectroData, PaErro
       FRAMES_PER_BUFFER,
       paNoFlag,
       streamCallBack,
-      spectroData
+      currentSpectroData
   );
   checkErr(err);
 
   err = Pa_StartStream(stream);
   checkErr(err);
 
-  char input;
+  unsigned char input = '\0';
   while (input != ' ' && input != 'r') {
     input = tolower(getch());
     if (input == 'r') {
-      close_stream(stream, spectroData, err);
+      close_stream(stream, currentSpectroData, err);
       init_stream(&err);
-      spectroData = init_spectro_data();
-      return process_stream(deviceSelection, spectroData, err);
+      currentSpectroData = init_spectro_data();
+      return process_stream(deviceSelection, currentSpectroData, err);
     }
   }
 
-  close_stream(stream, spectroData, err);
+  close_stream(stream, currentSpectroData, err);
 }
 
 int main() {
   PaError err;
 
   init_stream(&err);
-  streamCallbackData *spectroData = init_spectro_data();
+  streamCallbackData *currentSpectroData = init_spectro_data();
   int deviceSelection = prompt_device();
-  process_stream(deviceSelection, spectroData, err);
+  process_stream(deviceSelection, currentSpectroData, err);
 
   return EXIT_SUCCESS;
 }
