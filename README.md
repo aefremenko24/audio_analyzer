@@ -1,4 +1,4 @@
-# audio_analyzer
+# audio_analyzer_cpp
 
 Cross-platform digital sound analyzer application written in C++ using the PulseAudio sound server.
 Sound input is collected from a chosen input and metrics, including volume, frequencies, and live waveform are displayed in the console.
